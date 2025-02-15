@@ -1,0 +1,200 @@
+# Load required libraries
+library(MicSim)
+library(data.table)
+library(ggplot2)
+library(openxlsx)  
+library(dplyr)
+
+# Set seed for reproducibility
+set.seed(123)
+
+# Define simulation parameters
+num_individuals <- 5000
+simulation_years <- 41
+
+# Define age group proportions
+age_group_distribution <- c("15-49" = 0.539, "50-74" = 0.366, "75+" = 0.0947)
+
+# Sample age groups based on defined distribution
+age_groups <- sample(names(age_group_distribution), num_individuals, replace = TRUE, prob = age_group_distribution)
+
+# Define gender and obesity proportions
+gender_probs <- list(
+  "15-49" = c(male = 0.512, female = 0.488),
+  "50-74" = c(male = 0.450, female = 0.550),
+  "75+" = c(male = 0.335, female = 0.665)
+)
+
+obesity_probs <- list(
+  "15-49" = c("underweight and normal" = 0.519, "obese" = 0.170),
+  "50-74" = c("underweight and normal" = 0.275, "obese" = 0.331),
+  "75+" = c("underweight and normal" = 0.325, "obese" = 0.246)
+)
+
+# Define age range for each group
+age_ranges <- list(
+  "15-49" = 15:49,
+  "50-74" = 50:74,
+  "75+" = 75:100  
+)
+
+# Generate initial population
+population <- data.table(
+  id = 1:num_individuals,
+  age_group = factor(age_groups, levels = names(age_group_distribution))
+)
+
+# Assign gender, obesity, and age using vectorized operations
+population[, gender := mapply(function(ag) sample(c("male", "female"), 1, prob = gender_probs[[ag]]), age_group)]
+population[, obesity := mapply(function(ag) sample(c("underweight and normal", "obese"), 1, prob = obesity_probs[[ag]]), age_group)]
+population[, diabetes_status := "non-diabetic"]
+population[, age := mapply(function(ag) sample(age_ranges[[ag]], 1), age_group)]
+
+# Function to assign transition rates
+transition_rates <- function(pop) {
+  pop[, incidence_rate := dplyr::case_when(
+    age >= 15 & age < 50 & gender == "male" ~ 0.0035757,
+    age >= 15 & age < 50 & gender == "female" ~ 0.0026029,
+    age >= 50 & age < 75 & gender == "male" ~ 0.0085318,
+    age >= 50 & age < 75 & gender == "female" ~ 0.0076149,
+    age >= 75 & gender == "male" ~ 0.0015030,
+    age >= 75 & gender == "female" ~ 0.0014884,
+    TRUE ~ 0
+  )]
+  return(pop)
+}
+
+# Adjust rates based on obesity status
+adjust_rates_for_obesity <- function(pop) {
+  pop[obesity == "obese", incidence_rate := incidence_rate * 1.76]
+  return(pop)
+}
+
+# Define state transition function
+state_transition <- function(pop) {
+  pop <- transition_rates(pop)
+  pop <- adjust_rates_for_obesity(pop)
+  
+  pop[diabetes_status == "non-diabetic", diabetes_status := 
+        ifelse(runif(.N) < incidence_rate, "diabetic", "non-diabetic")]
+  
+  return(pop)
+}
+
+policy_intervention <- function(pop) {
+  # Track number of individuals who convert from obese to normal weight
+  initial_obese <- sum(pop$obesity == "obese")
+  
+  # Apply SSB Tax intervention (4.00% reduction in obesity)
+  obese_indices <- which(pop$obesity == "obese")
+  converted_ssb <- runif(length(obese_indices)) < 0.04
+  pop[obese_indices[converted_ssb], obesity := "underweight and normal"]
+  
+  # Apply Physical Activity intervention (1.20% reduction in obesity)
+  obese_indices <- which(pop$obesity == "obese")  # Update obese population
+  converted_pa <- runif(length(obese_indices)) < 0.012
+  pop[obese_indices[converted_pa], obesity := "underweight and normal"]
+  
+  # Calculate the total number of conversions
+  final_obese <- sum(pop$obesity == "obese")
+  num_converted_total <- initial_obese - final_obese
+  
+  return(list(pop = pop, num_converted = num_converted_total))
+}
+
+
+run_microsimulation <- function(initial_pop, years, with_policy = FALSE) {
+  pop <- copy(initial_pop)
+  summary <- data.table(Year = 1:years, Incidence_Rate = 0, Obesity_Reduced = 0)  # Add Obesity_Reduced column
+  
+  for (year in 1:years) {
+    if (with_policy && year > 1) {
+      policy_result <- policy_intervention(pop)
+      pop <- policy_result$pop
+      summary[year, Obesity_Reduced := policy_result$num_converted]
+    }
+    prev_pop <- copy(pop)
+    pop <- state_transition(pop)
+    
+    new_cases <- sum(pop$diabetes_status == "diabetic" & prev_pop$diabetes_status == "non-diabetic")
+    at_risk_pop <- sum(prev_pop$diabetes_status == "non-diabetic")
+    
+    summary[year, Incidence_Rate := ifelse(at_risk_pop > 0, new_cases / at_risk_pop, 0)]
+  }
+  return(summary)
+}
+
+
+# Monte Carlo simulation function
+run_monte_carlo <- function(n_replications, initial_pop, years, with_policy = FALSE) {
+  mc_results <- rbindlist(lapply(1:n_replications, function(i) {
+    result <- run_microsimulation(initial_pop, years, with_policy)
+    result[, Replication := i]
+    return(result)
+  }))
+  return(mc_results)
+}
+
+# Calculate percentiles for variables
+calculate_percentiles <- function(mc_results, variable) {
+  mc_results[, .(
+    lower = quantile(get(variable), probs = 0.025, na.rm = TRUE),
+    median = quantile(get(variable), probs = 0.5, na.rm = TRUE),
+    upper = quantile(get(variable), probs = 0.975, na.rm = TRUE)
+  ), by = Year]
+}
+
+# Run simulations
+n_replications <- 1000
+mc_baseline <- run_monte_carlo(n_replications, population, simulation_years, FALSE)
+mc_policy <- run_monte_carlo(n_replications, population, simulation_years, TRUE)
+
+# Process results
+baseline_incidence <- calculate_percentiles(mc_baseline, "Incidence_Rate")
+policy_incidence <- calculate_percentiles(mc_policy, "Incidence_Rate")
+
+# Create plot function
+create_combined_plot <- function(baseline_data, policy_data, y_label, title) {
+  ggplot() +
+    geom_ribbon(data = baseline_data, aes(x = Year, ymin = lower, ymax = upper, fill = "Baseline"), alpha = 0.3) +
+    geom_line(data = baseline_data, aes(x = Year, y = median, color = "Baseline"), linewidth = 1) +
+    geom_ribbon(data = policy_data, aes(x = Year, ymin = lower, ymax = upper, fill = "Policy"), alpha = 0.3) +
+    geom_line(data = policy_data, aes(x = Year, y = median, color = "Policy"), linewidth = 1) +
+    labs(x = "Year", y = y_label, title = title) +
+    theme_minimal() +
+    scale_color_manual(values = c("Baseline" = "red", "Policy" = "blue")) +
+    scale_fill_manual(values = c("Baseline" = "red", "Policy" = "blue"))
+}
+
+# Generate and save plot
+incidence_plot <- create_combined_plot(baseline_incidence, policy_incidence, "Incidence Rate", "Diabetes Incidence Rate Comparison")
+ggsave("incidence_comparison_plot.png", incidence_plot, width = 10, height = 6)
+print(incidence_plot)
+
+# Define file path
+file_path <- "C:/Users/Aan/Desktop/MICROSIM_HU_SSBTax20%&PA10%.xlsx"
+
+# Calculate obesity reduction percentiles
+policy_obesity_reduction <- calculate_percentiles(mc_policy, "Obesity_Reduced")
+
+# Export results to Excel
+export_results_to_excel <- function(baseline, policy, obesity_reduction, file_path) {
+  wb <- createWorkbook()
+  
+  addWorksheet(wb, "Baseline Incidence")
+  writeData(wb, "Baseline Incidence", baseline)
+  
+  addWorksheet(wb, "Policy Incidence")
+  writeData(wb, "Policy Incidence", policy)
+  
+  addWorksheet(wb, "Obesity Reduction")
+  writeData(wb, "Obesity Reduction", obesity_reduction)
+  
+  saveWorkbook(wb, file_path, overwrite = TRUE)
+}
+
+# Run export function
+export_results_to_excel(baseline_incidence, policy_incidence, policy_obesity_reduction, file_path)
+
+# Confirm export success
+cat("Simulation results successfully exported to:", file_path)
