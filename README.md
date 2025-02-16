@@ -1,7 +1,11 @@
 # IMPACT SSB TAX and PA IN EASTERN EU MICROSIMULATION
 Title: The Impact of a Sugar-Sweetened Beverage Tax and Increased Physical Activity on the Diabetes Burden in Eastern EU Countries: A Microsimulation Model
+
+
 Background
 The World Health Organization (WHO) recommends implementing a 20% sugar-sweetened beverage (SSB) tax and reducing physical inactivity by 15%. (1, 2) Eastern EU countries tend to have higher sugar consumption and lower physical activity levels. (3, 4) This study aims to identify the most effective scenarios for implementing an SSB tax and physical activity (PA) programs to reduce the burden of diabetes in Eastern EU countries (based on classification of https://unstats.un.org/unsd/methodology/m49/ includes: Poland, Hungary, Czech Republic, Slovakia, Romania, and Bulgaria).
+
+
 Material and Method
 •	Input Parameters: Age, gender, BMI (weight, height), diabetes status, and physical activity level. These baseline parameters were derived from EHIS 2019. 
 •	Synthetic Population: Created using weighted sampling to represent the real population. 
@@ -23,6 +27,8 @@ Material and Method
 8)	PA 10% 
 9)	PA 15% 
 10)	PA 20% 
+
+
 References: 
 1.	World Health Organization. (2020). Global action plan on physical activity 2018-2030: More active people for a healthier world. 
 2.	World Health Organization. (2022). WHO manual on sugar-sweetened beverage taxation policies to promote healthy diets. https://www.who.int/publications/i/item/9789240062485
