@@ -28,6 +28,7 @@ Material and Method
 9)	PA 15% 
 10)	PA 20% 
 
+*SSB Tax= Sugar-Sweetened Beverages Tax, PA= Physical Activity
 
 References: 
 1.	World Health Organization. (2020). Global action plan on physical activity 2018-2030: More active people for a healthier world. 
