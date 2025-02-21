@@ -7,12 +7,14 @@ The World Health Organization (WHO) recommends implementing a 20% sugar-sweetene
 
 
 Material and Method
+
 •	Input Parameters: Age, gender, BMI (weight, height), diabetes status, and physical activity level. These baseline parameters were derived from EHIS 2019. 
 •	Synthetic Population: Created using weighted sampling to represent the real population. 
 •	Microsimulation Model: A discrete event microsimulation model consisting of four states: healthy, obesity, diabetes mellitus (DM), and deceased. The model runs annually from 2020 to 2050. 
 •	Outcome Measure: Prevented incidence of DM from 2020 to 2050. 
 •	Model Validation: Cross-validation using MAPE/MAE and RMSE. 
 •	Sensitivity Analysis: Conducted using Monte Carlo simulations with 1,000 iterations to provide a 95% uncertainty interval (UI). 
+
 •	Comparative Scenarios: Different scenarios will be analyzed to assess the effects of various interventions:
 -	Baseline Scenario: No intervention 
 -	Counterfactual Scenario: SSB Tax 20% + PA increase 15% 
