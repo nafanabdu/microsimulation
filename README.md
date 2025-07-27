@@ -1,5 +1,5 @@
 # IMPACT SSB TAX and PA IN EASTERN EU MICROSIMULATION
-Title: The Impact of a Sugar-Sweetened Beverage Tax and Increased Physical Activity on the Diabetes Burden in Eastern EU Countries: A Microsimulation Model
+Title: The Impact of a Sugar-Sweetened Beverage Tax and Increased Physical Activity on Body Weight and Diabetes Burden in Eastern EU Countries: A Microsimulation Model
 
 
 Background
