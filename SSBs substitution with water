@@ -1,0 +1,229 @@
+library(data.table)
+library(openxlsx)
+
+set.seed(123)
+
+# -------------------------
+# Parameters
+# -------------------------
+num_individuals <- 5603
+simulation_years <- 32
+n_replications <- 1000
+
+# Transition rates per year
+transition_rates <- list(
+  healthy = list(overweight = 0.04, obese = 0.01, diabetic = 0.005),
+  overweight = list(obese = 0.11, diabetic = 0.051),
+  obese = list(diabetic = 0.082),
+  diabetic = list()
+)
+
+mortality_rate_diabetic <- 0.03  # 3%/year diabetic mortality
+
+# -------------------------
+# Population initialization
+# -------------------------
+sample_population <- function() {
+  age_groups <- c("15-49", "50-74", "75+")
+  income_levels <- c("low", "middle", "high")
+  gender_levels <- c("male", "female")
+  
+  # age-specific gender probabilities
+  gender_probs <- list(
+    "15-49" = c(male = 0.514, female = 0.486),
+    "50-74" = c(male = 0.451, female = 0.549),
+    "75+"   = c(male = 0.335, female = 0.665)
+  )
+  
+  age_group <- sample(age_groups, num_individuals, replace = TRUE, prob = c(0.538, 0.367, 0.0953))
+  income <- sample(income_levels, num_individuals, replace = TRUE, prob = c(0.4, 0.2, 0.4))
+  gender <- sapply(age_group, function(a) sample(gender_levels, 1, prob = gender_probs[[a]]))
+  
+  pop <- data.table(
+    id = 1:num_individuals,
+    age_group = age_group,
+    income = income,
+    gender = gender
+  )
+  
+  obesity_probs <- list(
+    low = list(
+      "15-49" = c(healthy=0.518, overweight=0.277, obese=0.205),
+      "50-74" = c(healthy=0.264, overweight=0.379, obese=0.357),
+      "75+"   = c(healthy=0.298, overweight=0.423, obese=0.278)
+    ),
+    middle = list(
+      "15-49" = c(healthy=0.502, overweight=0.319, obese=0.179),
+      "50-74" = c(healthy=0.272, overweight=0.365, obese=0.363),
+      "75+"   = c(healthy=0.360, overweight=0.408, obese=0.232)
+    ),
+    high = list(
+      "15-49" = c(healthy=0.544, overweight=0.313, obese=0.143),
+      "50-74" = c(healthy=0.298, overweight=0.414, obese=0.282),
+      "75+"   = c(healthy=0.352, overweight=0.444, obese=0.203)
+    )
+  )
+  
+  pop[, obesity_status := mapply(function(inc, ag){
+    probs <- obesity_probs[[inc]][[ag]]
+    sample(names(probs), 1, prob = probs)
+  }, income, age_group)]
+  
+  pop[, diabetes_status := "non-diabetic"]
+  pop[, death_status := FALSE]
+  return(pop)
+}
+
+# -------------------------
+# Policy intervention (ONLY: (ONLY: Replacing with water)
+# -------------------------
+policy_intervention <- function(pop) {
+  # Assume this leads to a 3% (0.03) annual chance
+  # that an obese person becomes healthy due to improved diet
+  subsidy_effect <- 0.03
+  
+  # Apply effect only to obese individuals
+  pop[, pre_obese := (obesity_status == "obese")]
+  pop[pre_obese == TRUE, convert_subsidy := runif(.N) < subsidy_effect]
+  pop[pre_obese == TRUE & convert_subsidy == TRUE, obesity_status := "healthy"]
+  
+  # Clean up temporary columns
+  pop[, c("pre_obese", "convert_subsidy") := NULL]
+  
+  return(pop)
+}
+
+# -------------------------
+# Annual transition (with death)
+# -------------------------
+apply_transitions_once <- function(pop) {
+  pop_alive <- pop[death_status == FALSE]
+  
+  pop_alive[, obesity_status := vapply(obesity_status, function(s) {
+    if (s == "healthy") {
+      p_ow <- transition_rates$healthy$overweight
+      p_ob <- transition_rates$healthy$obese
+      p_di <- transition_rates$healthy$diabetic
+      p_stay <- 1 - (p_ow + p_ob + p_di)
+      probs <- c(healthy=p_stay, overweight=p_ow, obese=p_ob, diabetic=p_di)
+    } else if (s == "overweight") {
+      p_ob <- transition_rates$overweight$obese
+      p_di <- transition_rates$overweight$diabetic
+      p_stay <- 1 - (p_ob + p_di)
+      probs <- c(overweight=p_stay, obese=p_ob, diabetic=p_di)
+    } else if (s == "obese") {
+      p_di <- transition_rates$obese$diabetic
+      p_stay <- 1 - p_di
+      probs <- c(obese=p_stay, diabetic=p_di)
+    } else {
+      probs <- c(diabetic=1)
+    }
+    sample(names(probs), 1, prob = probs)
+  }, FUN.VALUE = character(1))]
+  
+  pop_alive[obesity_status == "diabetic", diabetes_status := "diabetic"]
+  
+  pop_alive[diabetes_status == "diabetic", death_event := runif(.N) < mortality_rate_diabetic]
+  pop_alive[death_event == TRUE, death_status := TRUE]
+  pop_alive[, death_event := NULL]
+  
+  setkey(pop, id)
+  setkey(pop_alive, id)
+  pop[pop_alive$id, names(pop_alive) := pop_alive]
+  
+  return(pop)
+}
+
+# -------------------------
+# Simulation loop (stratified by sex, age, income)
+# -------------------------
+all_reps <- vector("list", n_replications)
+
+for (rep in seq_len(n_replications)) {
+  init_pop <- sample_population()
+  pop_base <- copy(init_pop)
+  pop_policy <- copy(init_pop)
+  
+  dt_rep <- data.table()
+  
+  for (yr in 1:simulation_years) {
+    # Apply the fruit & vegetable subsidy each year after year 1
+    if (yr > 1) pop_policy <- policy_intervention(pop_policy)
+    
+    pop_base <- apply_transitions_once(pop_base)
+    pop_policy <- apply_transitions_once(pop_policy)
+    
+    base_summary <- pop_base[, .(
+      Obese_Baseline = sum(obesity_status=="obese" & !death_status),
+      Diabetic_Baseline = sum(diabetes_status=="diabetic" & !death_status),
+      Deaths_Baseline = sum(death_status)
+    ), by=.(gender, age_group, income)]
+    
+    policy_summary <- pop_policy[, .(
+      Obese_Policy = sum(obesity_status=="obese" & !death_status),
+      Diabetic_Policy = sum(diabetes_status=="diabetic" & !death_status),
+      Deaths_Policy = sum(death_status)
+    ), by=.(gender, age_group, income)]
+    
+    year_summary <- merge(base_summary, policy_summary, by=c("gender","age_group","income"), all=TRUE)
+    year_summary[is.na(year_summary)] <- 0L
+    
+    year_summary[, `:=`(
+      replication = rep,
+      year = yr,
+      Obese_Averted = Obese_Baseline - Obese_Policy,
+      Diabetic_Averted = Diabetic_Baseline - Diabetic_Policy,
+      Deaths_Averted = Deaths_Baseline - Deaths_Policy
+    )]
+    
+    dt_rep <- rbind(dt_rep, year_summary, use.names = TRUE, fill = TRUE)
+  }
+  all_reps[[rep]] <- dt_rep
+}
+
+all_results <- rbindlist(all_reps, fill = TRUE)
+
+# -------------------------
+# Summaries by sex, age & income
+# -------------------------
+annual_summary <- all_results[, .(
+  Obese_Averted_Mean = mean(Obese_Averted),
+  Obese_Averted_Lower = quantile(Obese_Averted, 0.025),
+  Obese_Averted_Upper = quantile(Obese_Averted, 0.975),
+  Diabetic_Averted_Mean = mean(Diabetic_Averted),
+  Diabetic_Averted_Lower = quantile(Diabetic_Averted, 0.025),
+  Diabetic_Averted_Upper = quantile(Diabetic_Averted, 0.975),
+  Deaths_Averted_Mean = mean(Deaths_Averted),
+  Deaths_Averted_Lower = quantile(Deaths_Averted, 0.025),
+  Deaths_Averted_Upper = quantile(Deaths_Averted, 0.975)
+), by = .(year, gender, age_group, income)]
+
+cumulative_per_rep <- all_results[, .(
+  Total_Obese_Averted = sum(Obese_Averted),
+  Total_Diabetic_Averted = sum(Diabetic_Averted),
+  Total_Deaths_Averted = sum(Deaths_Averted)
+), by = .(replication, gender, age_group, income)]
+
+total_summary <- cumulative_per_rep[, .(
+  Total_Obese_Mean = mean(Total_Obese_Averted),
+  Total_Obese_Lower = quantile(Total_Obese_Averted, 0.025),
+  Total_Obese_Upper = quantile(Total_Obese_Averted, 0.975),
+  Total_Diabetic_Mean = mean(Total_Diabetic_Averted),
+  Total_Diabetic_Lower = quantile(Total_Diabetic_Averted, 0.025),
+  Total_Diabetic_Upper = quantile(Total_Diabetic_Averted, 0.975),
+  Total_Deaths_Mean = mean(Total_Deaths_Averted),
+  Total_Deaths_Lower = quantile(Total_Deaths_Averted, 0.025),
+  Total_Deaths_Upper = quantile(Total_Deaths_Averted, 0.975)
+), by=.(gender, age_group, income)]
+
+# -------------------------
+# Export to Excel
+# -------------------------
+output_file <- "C:/file.xlsx"
+wb <- createWorkbook()
+addWorksheet(wb, "Annual_Averted_Stratified")
+writeData(wb, "Annual_Averted_Stratified", annual_summary)
+addWorksheet(wb, "Total_Averted_Stratified")
+writeData(wb, "Total_Averted_Stratified", total_summary)
+saveWorkbook(wb, output_file, overwrite = TRUE)
+cat("✅ Results exported to:", output_file, "\n")
