@@ -1,4 +1,4 @@
-Title: The Impact of a Sugar-Sweetened Beverage Tax and Increased Physical Activity on Obesity and Diabetes Burden in Eastern EU Countries: A Microsimulation Model
+**Title: The Impact of a Sugar-Sweetened Beverage Tax and Increased Physical Activity on Obesity and Diabetes Burden in Eastern EU Countries: A Microsimulation Model**
 
 
 Background
