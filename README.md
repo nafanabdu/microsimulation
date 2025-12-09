@@ -17,18 +17,8 @@ Material and Method
 •	Comparative Scenarios: Different scenarios will be analyzed to assess the effects of various interventions:
 -	Main Scenario: SSB Tax 20% + PA increase 15% 
 -	Comparator Scenarios: 
-1)	SSB Tax 10% 
-2)	SSB Tax 10% + PA 10% 
-3)	SSB Tax 10% + PA 15% 
-4)	SSB Tax 10% + PA 20% 
-5)	SSB Tax 20% 
-6)	SSB Tax 20% + PA 10% 
-7)	SSB Tax 20% + PA 20% 
-8)	PA 10% 
-9)	PA 15% 
-10)	PA 20%
-11)	SSBs substitution with water
-12)	30% Subsidy on Fruit and Vegetables 
+  1)	SSBs substitution with water
+  2)	30% Subsidy on Fruit and Vegetables 
 
 *SSB Tax= Sugar-Sweetened Beverages Tax, PA= Physical Activity
 
