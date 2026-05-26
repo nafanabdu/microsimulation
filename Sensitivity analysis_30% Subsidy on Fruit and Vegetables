@@ -3,9 +3,7 @@ library(openxlsx)
 
 set.seed(123)
 
-# -------------------------
 # Parameters
-# -------------------------
 num_individuals <- 5603
 simulation_years <- 32
 n_replications <- 1000
@@ -20,9 +18,7 @@ transition_rates <- list(
 
 mortality_rate_diabetic <- 0.03  # 3%/year diabetic mortality
 
-# -------------------------
 # Population initialization
-# -------------------------
 sample_population <- function() {
   age_groups <- c("15-49", "50-74", "75+")
   income_levels <- c("low", "middle", "high")
@@ -74,9 +70,7 @@ sample_population <- function() {
   return(pop)
 }
 
-# -------------------------
 # Policy intervention (ONLY: 30% subsidy on fruit and veg)
-# -------------------------
 policy_intervention <- function(pop) {
   # Assume this 30% subsidy leads to a 3% (0.03) annual chance
   # that an obese person becomes healthy due to improved diet
@@ -93,9 +87,7 @@ policy_intervention <- function(pop) {
   return(pop)
 }
 
-# -------------------------
 # Annual transition (with death)
-# -------------------------
 apply_transitions_once <- function(pop) {
   pop_alive <- pop[death_status == FALSE]
   
@@ -134,9 +126,7 @@ apply_transitions_once <- function(pop) {
   return(pop)
 }
 
-# -------------------------
 # Simulation loop (stratified by sex, age, income)
-# -------------------------
 all_reps <- vector("list", n_replications)
 
 for (rep in seq_len(n_replications)) {
@@ -183,9 +173,7 @@ for (rep in seq_len(n_replications)) {
 
 all_results <- rbindlist(all_reps, fill = TRUE)
 
-# -------------------------
 # Summaries by sex, age & income
-# -------------------------
 annual_summary <- all_results[, .(
   Obese_Averted_Mean = mean(Obese_Averted),
   Obese_Averted_Lower = quantile(Obese_Averted, 0.025),
@@ -216,9 +204,7 @@ total_summary <- cumulative_per_rep[, .(
   Total_Deaths_Upper = quantile(Total_Deaths_Averted, 0.975)
 ), by=.(gender, age_group, income)]
 
-# -------------------------
 # Export to Excel
-# -------------------------
 output_file <- "C:/File.xlsx"
 wb <- createWorkbook()
 addWorksheet(wb, "Annual_Averted_Stratified")
